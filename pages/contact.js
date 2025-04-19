@@ -2,7 +2,7 @@ import { useState } from "react";
 
 export default function Contact() {
   const [image, setImage] = useState(null);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisResult, setAnalysisResult] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -12,7 +12,6 @@ export default function Contact() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!image) {
       alert("Please select an image!");
       return;
@@ -23,6 +22,7 @@ export default function Contact() {
 
     setLoading(true);
     setError(null);
+    setAnalysisResult([]);
 
     try {
       const res = await fetch("https://api.calorieninjas.com/v1/imagetextnutrition", {
@@ -38,7 +38,14 @@ export default function Contact() {
       if (data.error) {
         setError(data.error);
       } else {
-        setAnalysisResult(data.items || []);
+        const items = data.items || [];
+        const enrichedItems = await Promise.all(
+          items.map(async (item) => {
+            const imageUrl = await fetchImage(item.name);
+            return { ...item, imageUrl };
+          })
+        );
+        setAnalysisResult(enrichedItems);
       }
     } catch (err) {
       setError("An error occurred while analyzing the image.");
@@ -48,8 +55,24 @@ export default function Contact() {
     }
   };
 
+  const fetchImage = async (query) => {
+    const unsplashKey = "zFqGmqznz7V5dWru5g1d315FEtkEgMRY0TNa61g8kpw";
+    try {
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
+          query
+        )}&per_page=1&client_id=${unsplashKey}`
+      );
+      const data = await res.json();
+      return data.results?.[0]?.urls?.regular || "https://via.placeholder.com/300";
+    } catch (error) {
+      console.error("Unsplash error:", error);
+      return "https://via.placeholder.com/300";
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#e0f7fa] via-[#f9fafb] to-white px-6 py-10">
+    <div className="min-h-screen bg-[#f9fafb] px-6 py-10">
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-semibold text-center mb-4 font-serif text-black">
           Upload and Analyze Food Text Image
@@ -75,14 +98,19 @@ export default function Contact() {
         {analysisResult && analysisResult.length > 0 && !error && (
           <div className="mt-6">
             <h2 className="text-xl font-semibold mb-4 font-serif text-black text-center">
-              Nutrition Details
+              Nutrition Details with Images
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {analysisResult.map((item, index) => (
                 <div
                   key={index}
-                  className="bg-gray-50 p-4 rounded-md shadow border border-gray-200 text-black"
+                  className="bg-gray-50 rounded-lg shadow-md p-4 border border-gray-200 text-black"
                 >
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="w-full h-40 object-cover rounded-md mb-3"
+                  />
                   <p><strong>Name:</strong> {item.name}</p>
                   <p><strong>Calories:</strong> {item.calories} kcal</p>
                   <p><strong>Serving Size:</strong> {item.serving_size_g} g</p>
